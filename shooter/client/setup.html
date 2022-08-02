@@ -1,0 +1,20 @@
+<script src="./client/socket.io-1.4.5.js"></script>
+<script>
+    var socket = io();
+</script>
+<body>
+<div id="shootSpeed">
+<input id="shootSpeedInp" type="number"></input>
+</div>
+
+<button onclick="update()">Update</button>
+<script defer>
+	function update(){
+		console.log(document.getElementById("shootSpeedInp").value);
+		var shtSpeed = document.getElementById("shootSpeedInp").value;
+		socket.emit("updateSettings", {
+			shootSpeed: shtSpeed
+		});
+	}
+</script>
+</body>

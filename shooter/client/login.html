@@ -1,0 +1,197 @@
+<script src="./client/socket.io-1.4.5.js"></script>
+<script>
+    var socket = io();
+    var sizeMultiplier = 3;
+</script>
+<style>
+  img {
+    image-rendering: auto;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+  canvas{ border: 1px solid black; }
+</style>
+<body bgcolor="gray">
+  <div align="center">
+    <div id="loginForm">
+      <input type="text" id="usernameInput" placeholder="Username">
+      <button onclick="login()">LOGIN</button>
+    </div>
+    <div>
+      <h2>Skin</h2>
+      <select id="skinSelect" onchange="refreshSkin()">
+      </select><br>
+      <img src="" id="showSkin" width="10%">
+    </div>
+    <div>
+      <h2>Controls</h2>
+      <div>Jump: <button id="jmp" onclick="setJumpKey()"></button></div><br>
+      <div>Left: <button id="lft" onclick="setLeftKey()"></button></div><br>
+      <div>Right: <button id="rgt" onclick="setRightKey()"></button></div><br>
+      <div>Down: <button id="dwn" onclick="setDownKey()"></button></div><br>
+      <div>Score: <button id="scr" onclick="setScoreKey()"></button></div><br>
+      <div>Shoot: Left mouse</div>
+      <div id="key"></div>
+    </div>
+    <div>
+      <canvas id="frame" width="500" height="283.3"></canvas>
+    </div>
+  </div>
+
+<script type="text/javascript" src="./client/draw.js"></script>
+<script>
+  function refreshSkin(){
+    document.getElementById("showSkin").src = loadedSkins[document.getElementById("skinSelect").value.toLowerCase()].static.src;
+  }
+
+  function getCookie(cname) {
+    var name = cname + "=";
+    var decodedCookie = decodeURIComponent(document.cookie);
+    var ca = decodedCookie.split(';');
+    for(var i = 0; i <ca.length; i++) {
+      var c = ca[i];
+      while (c.charAt(0) == ' ') {
+        c = c.substring(1);
+      }
+      if (c.indexOf(name) == 0) {
+        return c.substring(name.length, c.length);
+      }
+    }
+    return "";
+  }
+
+  function getKeyByValue(object, value) {
+    return Object.keys(object).find(key => object[key] === value);
+  }
+
+  var keys = {
+    jump: getCookie("jump") || 87,
+    right: getCookie("right") || 68,
+    left: getCookie("left") || 65,
+    down: getCookie("down") || 83,
+    score: getCookie("score") || 81
+  }
+
+  document.getElementById("jmp").innerHTML = String.fromCharCode(keys.jump);
+  document.getElementById("lft").innerHTML = String.fromCharCode(keys.left);
+  document.getElementById("rgt").innerHTML = String.fromCharCode(keys.right);
+  document.getElementById("dwn").innerHTML = String.fromCharCode(keys.down);
+  if(keys.score == 9){
+    document.getElementById("scr").innerHTML = "TAB";
+  }else{
+    document.getElementById("scr").innerHTML = String.fromCharCode(keys.score);
+  }
+
+  var waitingJumpKey = false;
+  var waitingLeftKey = false;
+  var waitingDownKey = false;
+  var waitingRightKey = false;
+  var waitingScoreKey = false;
+
+  function login(){
+    username = document.getElementById('usernameInput').value;
+    if(username == ""){
+      username = "no name"
+    }
+    document.cookie = "username="+username;
+    document.cookie = "skin="+document.getElementById("skinSelect").value.toLowerCase();
+    document.cookie = "jump="+keys.jump;
+    document.cookie = "left="+keys.left;
+    document.cookie = "down="+keys.down;
+    document.cookie = "right="+keys.right;
+    document.cookie = "score="+keys.score;
+    window.location.href = "/game";
+  }
+
+  function waitingClear(key){
+    if(!waitingDownKey && !waitingJumpKey && !waitingLeftKey && !waitingRightKey && !waitingScoreKey){
+      return true;
+    }else{
+      return false;
+    }
+  }
+
+  function setJumpKey(){
+    if(waitingClear()){
+      waitingJumpKey = true;
+    }
+  }
+
+  function setLeftKey(){
+    if(waitingClear()){
+      waitingLeftKey = true;
+    }
+  }
+
+  function setDownKey(){
+    if(waitingClear()){
+      waitingDownKey = true;
+    }
+  }
+
+  function setRightKey(){
+    if(waitingClear()){
+      waitingRightKey = true;
+    }
+  }
+
+  function setScoreKey(){
+    if(waitingClear()){
+      waitingScoreKey = true;
+    }
+  }
+
+  function keyDown(e){
+    if(e.keyCode == 13){
+      login();
+    }
+    if(waitingJumpKey){
+      waitingJumpKey = false;
+      document.getElementById("jmp").innerHTML = e.key.toUpperCase();
+      keys.jump = e.keyCode;
+    }else if(waitingLeftKey){
+      waitingLeftKey = false;
+      document.getElementById("lft").innerHTML = e.key.toUpperCase();
+      keys.left = e.keyCode;
+    }else if(waitingDownKey){
+      waitingDownKey = false;
+      document.getElementById("dwn").innerHTML = e.key.toUpperCase();
+      keys.down = e.keyCode;
+    }else if(waitingRightKey){
+      waitingRightKey = false;
+      document.getElementById("rgt").innerHTML = e.key.toUpperCase();
+      keys.right = e.keyCode;
+    }else if(waitingScoreKey){
+      waitingScoreKey = false;
+      document.getElementById("scr").innerHTML = e.key.toUpperCase();
+      keys.score = e.keyCode;
+    }
+  }
+
+  function adjustData(data){
+    data.players.forEach(function (player){
+      player.pos.x /= sizeMultiplier;
+      player.pos.y /= sizeMultiplier;
+      player.size.x /= sizeMultiplier;
+      player.size.y /= sizeMultiplier;
+    });
+
+    data.bullets.forEach(function (bullet){
+      bullet.pos.x /= sizeMultiplier;
+      bullet.pos.y /= sizeMultiplier;
+      bullet.size /= sizeMultiplier;
+    });
+
+  }
+
+  socket.on("baseClock", function (data){
+
+    adjustData(data);
+
+    drawNextFrame(data);
+  });
+
+  document.addEventListener("keydown",keyDown,false);
+
+</script>
+</body>

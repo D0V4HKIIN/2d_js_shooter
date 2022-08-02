@@ -1,0 +1,194 @@
+<script src="./client/socket.io-1.4.5.js"></script>
+<script>
+  var socket = io();
+  var sizeMultiplier = 1;
+</script>
+<style>
+  canvas{ border: 1px solid black; }
+</style>
+<body>
+
+  <div id="ping">Ping:</div>
+
+  <canvas id="frame" width="1500" height="850" onmousemove="updateCursor(event)" tabindex="0" oncontextmenu="return false" onselectstart="return false" ondragstart="return false"></canvas>
+<script type="text" src="./client/map/walls.json"></script>
+<script type="text/javascript" src="./client/draw.js"></script>
+<script defer>
+  //controls
+  var rightPressed = false;
+  var leftPressed = false;
+  var jumpPressed = false;
+  var downPressed = false;
+
+  var shooting = false;
+  var shootTeleport = false;
+
+  socket.emit("sendBackPlayer", {
+    username: getCookie("username"),
+    skin: getCookie("skin")
+  });
+
+  function getCookie(cname) {
+    var name = cname + "=";
+    var decodedCookie = decodeURIComponent(document.cookie);
+    var ca = decodedCookie.split(';');
+    for(var i = 0; i < ca.length; i++) {
+      var c = ca[i];
+      while (c.charAt(0) == ' ') {
+        c = c.substring(1);
+      }
+      if (c.indexOf(name) == 0) {
+        return c.substring(name.length, c.length);
+      }
+    }
+    return "";
+  }
+
+  var settings = {
+      keys: {
+      jump: getCookie("jump"),
+      right: getCookie("right"),
+      left: getCookie("left"),
+      down: getCookie("down"),
+      score: getCookie("score")
+    }
+  }
+
+  var cursorPos = {};
+
+  function updateCursor(e){
+    cursorPos = getCursorPosition(canvas, e);
+  }
+
+  socket.on("baseClock", function (data){
+
+    drawNextFrame(data);
+
+    checkKeys();
+
+    socket.emit("baseClockCallback", {
+      mousePos:{
+        x: cursorPos.x,
+        y: cursorPos.y
+      },
+      shooting: shooting,
+      shootTeleport: shootTeleport
+    });
+  });
+
+
+  function getCursorPosition(canvas, event) {
+    var pos = {};
+    const rect = canvas.getBoundingClientRect();
+    pos.x = event.clientX - rect.left;
+    pos.y = event.clientY - rect.top;
+
+    return pos;
+  }
+
+  window.addEventListener("keydown",keyDown,false);
+  window.addEventListener("keyup",keyUp,false);
+
+  window.addEventListener("keydown", scoreKeyDown);
+  window.addEventListener("keyup", scoreKeyUp);
+
+  function scoreKeyDown(event){
+    var key = event.keyCode;
+    if(key == settings.keys.score){
+      //show score
+      window.addEventListener("keyup", scoreKeyUp);
+      window.removeEventListener("keydown", scoreKeyDown);
+      overlays.push(drawScore);
+    }
+  }
+
+  function scoreKeyUp(event){
+    var key = event.keyCode;
+    if(key == settings.keys.score){
+      window.addEventListener("keydown", scoreKeyDown);
+      window.removeEventListener("keyup", scoreKeyUp);
+      removeFromArray(overlays, drawScore);
+    }
+  }
+
+  function keyDown(event){
+    var key = event.keyCode;
+    if(key == settings.keys.right){
+      rightPressed = true;
+    }else if (key == settings.keys.left) {
+      leftPressed = true;
+    }else if (key == settings.keys.jump) {
+      jumpPressed = true;
+    }else if (key == settings.keys.down) {
+      downPressed = true;
+    }
+  }
+
+  function removeFromArray(arr, stuff){
+    arr.forEach(function (content, ind, array){
+      if(content == stuff){
+        array.splice(ind,1);
+      }
+    });
+  }
+
+  function keyUp(event){
+    var key = event.keyCode;
+    if(key == settings.keys.right){
+      rightPressed = false;
+    }else if (key == settings.keys.left) {
+      leftPressed = false;
+    }else if (key == settings.keys.jump) {
+      jumpPressed = false;
+    }else if (key == settings.keys.down) {
+      downPressed = false;
+    }
+  }
+
+  function checkKeys(){
+    if (rightPressed) {
+      socket.emit("moveRight",{});
+    }
+    if (leftPressed) {
+      socket.emit("moveLeft",{});
+    }
+    if (jumpPressed) {
+      socket.emit("jump",{});
+    }
+    if (downPressed) {
+      socket.emit("down",{});
+    }
+  }
+
+  canvas.addEventListener('mousedown', function(e) {
+    if(e.buttons == 1){
+      shooting = true;
+    }
+    if(e.buttons == 2){
+      shootTeleport = true;
+    }
+  });
+
+  window.addEventListener('mouseup', function(e) {
+    if(e.button == 0){
+      shooting = false;
+    }
+    if(e.button == 2){
+      shootTeleport = false;
+    }
+  });
+
+  /*canvas.onblur(function (){
+    htis.focus();
+  });*/
+
+  socket.on("sendPingRequest", function (){
+    socket.emit("sendPong", {});
+  });
+
+  socket.on("sendPing",function (data){
+    document.getElementById("ping").innerHTML = "Ping: " + data.ping + " ms";
+  });
+
+</script>
+</body>

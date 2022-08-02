@@ -1,0 +1,435 @@
+<html>
+<script src="./client/socket.io-1.4.5.js"></script>
+  <head>
+    <title>map-editor</title>
+  </head>
+
+  <style>
+    canvas{ border: 1px solid black; }
+  </style>
+
+<body>
+  <canvas id="frame" width="1500" height="850" onmousemove="getCursorPosition(event)" tabindex="1"></canvas><br>
+
+<div id="RadioSettings">
+  <input onclick="setAddWalls()" name="options" type="radio" id="addWalls" checked><label for="addWalls">Add Walls</label>
+  <input onclick="setRemoveWalls()" name="options" type="radio" id="removeWalls"><label for="removeWalls">Remove Walls</label>
+  <input onclick="setEditWalls()" name="options" type="radio" id="editWalls"><label for="editWalls">Edit Walls</label>
+  <input onclick="setAddSpawns()" name="options" type="radio" id="addSpawns"><label for="addSpawns">Add Spawnpoints</label>
+  <input onclick="setRemoveSpawns()" name="options" type="radio" id="removeSpawns"><label for="removeSpawns">Remove Spawnpoints</label>
+  <input onclick="setEditSpawns()" name="options" type="radio" id="editSpawns"><label for="editSpawns">Edit Spawnpoints</label><br>
+
+  x: <input id="x" type="number" value="0"></input>
+  y: <input id="y" type="number" value="0"></input>
+  w: <input id="w" type="number" value="0"></input>
+  h: <input id="h" type="number" value="0"></input>
+  <button id="makeWallButton" onclick="createWall(getInputPos(), getInputSize())">Create wall</button>
+</div>
+
+  <button onclick="save()">Save</button>
+</body>
+
+<script src="./client/wall.js"></script>
+<script src="./client/spawn.js"></script>
+<script defer>
+
+  var socket = io();
+  var walls = [{"pos":{"x":"0","y":"840"},"size":{"x":"1500","y":"10"}},{"pos":{"x":"0","y":"0"},"size":{"x":"1500","y":"10"}},{"pos":{"x":"0","y":"0"},"size":{"x":"10","y":"850"}},{"pos":{"x":"1490","y":"0"},"size":{"x":"10","y":"850"}}];
+  var highlightedWall = {};
+
+  var spawnpoints = [];
+  var highlightedSpawn = {};
+
+  var c = document.getElementById("frame");
+  var ctx = c.getContext("2d");
+  const canvas = document.querySelector('canvas');
+
+  var cursorPos = {};
+  var startingPos = {};
+  var formStarted = false;
+
+  function save(){
+    console.log(walls);
+    var text = "module.exports = [\n";
+    for (var i = 0; i < walls.length; i++) {
+      text += "{\npos: {\nx:"+walls[i].pos.x+",";
+    }
+    socket.emit("save", {
+      "walls": walls
+    });
+    window.open("./download")
+  }
+
+  function getInputPos(){
+    return {
+      x: document.getElementById("x").value,
+      y: document.getElementById("y").value
+    }
+  }
+
+  function getInputSize(){
+    return {
+      x: document.getElementById("w").value,
+      y: document.getElementById("h").value
+    }
+  }
+
+  function clearCanvas() {
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, c.width, c.height);
+  }
+
+  function drawWalls(){
+    walls.forEach(function (wall){
+      ctx.fillStyle = "#696969";
+      ctx.fillRect(wall.pos.x,wall.pos.y,wall.size.x,wall.size.y);
+    });
+    if(highlightedWall.pos){
+      ctx.fillStyle = "red";
+      ctx.fillRect(highlightedWall.pos.x,highlightedWall.pos.y,highlightedWall.size.x,highlightedWall.size.y);
+    }
+  }
+
+  const circleRadius = 25;
+
+  function drawSpawns(){
+    ctx.fillStyle = "blue";
+    for (var i = 0; i < spawnpoints.length; i++){
+      ctx.beginPath();
+      ctx.arc(spawnpoints[i].pos.x, spawnpoints[i].pos.y,circleRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if(highlightedSpawn.pos){
+      ctx.beginPath();
+      ctx.fillStyle = "red";
+      ctx.arc(highlightedSpawn.pos.x, highlightedSpawn.pos.y,circleRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function drawNextFrame(){
+    clearCanvas();
+    drawWalls();
+    drawSpawns();
+
+    if(formStarted){
+      ctx.fillStyle = "#696969";
+      ctx.fillRect(startingPos.x,startingPos.y,cursorPos.x-startingPos.x,cursorPos.y-startingPos.y);
+    }
+  }
+
+  setInterval(drawNextFrame, 100);
+
+  function getCursorPosition(event) {
+    const rect = canvas.getBoundingClientRect();
+    cursorPos.x = event.clientX - rect.left;
+    cursorPos.y = event.clientY - rect.top;
+    drawNextFrame();
+  }
+
+  function startForm(){
+    startingPos = Object.assign({}, cursorPos);
+    formStarted = true;
+  }
+
+  function topLeftCorner(before, after){
+    var tmp = {};
+
+    if(before.x < after.x){
+      	tmp.x = before.x;
+    }else{
+      tmp.x = after.x;
+    }
+
+    if(before.y < after.y){
+      tmp.y = before.y;
+    }else{
+      tmp.y = after.y;
+    }
+
+    return tmp;
+  }
+
+  function createWall(pos, size){
+    walls.push(new Wall(pos,size));
+    console.log(walls);
+    if(walls[walls.length-1].size.x <= 5 || walls[walls.length-1].size.y <= 5){
+      walls.pop();
+    }
+  }
+
+  function editWall(){
+    if(highlightedWall.pos){
+      highlightedWall.pos = getInputPos();
+      highlightedWall.size = getInputSize();
+    }
+  }
+
+  function editSpawn(){
+    if(highlightedSpawn.pos){
+      highlightedSpawn.pos = getInputPos();
+    }
+  }
+
+  function endForm(){
+    formStarted = false;
+    createWall(topLeftCorner(startingPos,cursorPos),{
+      x: Math.abs(cursorPos.x-startingPos.x),
+      y: Math.abs(cursorPos.y-startingPos.y)
+    });
+  }
+
+  function wallClicked(wall){
+    return cursorPos.x > wall.pos.x && cursorPos.x < wall.pos.x+wall.size.x && cursorPos.y > wall.pos.y && cursorPos.y < wall.pos.y+wall.size.y;
+  }
+
+  function anyWallClicked(){
+    for (var i = 0; i < walls.length; i++){
+      if(wallClicked(walls[i])){
+        return [true,i];
+      }
+    }
+    return [false];
+  }
+
+  function deleteWall(){
+    var clicked = anyWallClicked();
+    if(clicked[0]){
+      walls.splice(clicked[1],1);
+    }
+  }
+
+  function highlight(wall){
+    highlightedWall = wall;
+  }
+
+  function updateInputs(){
+    if(highlightedWall.pos){
+      document.getElementById("x").value = highlightedWall.pos.x;
+      document.getElementById("y").value = highlightedWall.pos.y;
+      document.getElementById("w").value = highlightedWall.size.x;
+      document.getElementById("h").value = highlightedWall.size.y;
+    }else if (highlightedSpawn.pos){
+      document.getElementById("x").value = highlightedSpawn.pos.x;
+      document.getElementById("y").value = highlightedSpawn.pos.y;
+    }
+  }
+
+  function selectWall(){
+    var clicked = anyWallClicked();
+    if(clicked[0]){
+      highlight(walls[clicked[1]]);
+    }
+    updateInputs();
+  }
+
+  function addSpawn(pos){
+    spawnpoints.push(new Spawn(pos));
+    console.log(spawnpoints);
+  }
+
+  function squareDist(a,b){
+    console.log((a.x-b.pos.x)*(a.x-b.pos.x) + (a.y-b.pos.y)*(a.y-b.pos.y));
+    return (a.x-b.pos.x)*(a.x-b.pos.x) + (a.y-b.pos.y)*(a.y-b.pos.y);
+  }
+
+  function insideCircle(circle){
+    if(squareDist(cursorPos,circle) <= (circleRadius * circleRadius)){
+      return true;
+    }
+    return false;
+  }
+
+  function insideAnyCircle(circles){
+    for (var i = 0; i < circles.length; i++) {
+      if(insideCircle(circles[i])){
+        console.log("true" + i);
+        return i;
+      }
+    }
+    return false;
+  }
+
+  function removeSpawn(){
+    var inside = insideAnyCircle(spawnpoints);
+    if(typeof inside === "number"){
+      spawnpoints.splice(inside,1);
+    }
+  }
+
+  function selectSpawn(){
+    var inside = insideAnyCircle(spawnpoints);
+    if(typeof inside === "number"){
+      highlightedSpawn = spawnpoints[inside];
+    }
+    updateInputs();
+  }
+
+  function createWallButtons(){
+    document.getElementById("makeWallButton").setAttribute("onclick", "createWall(getInputPos(), getInputSize())");
+    document.getElementById("makeWallButton").innerHTML = "Create wall";
+  }
+
+  function editWallButtons(){
+    document.getElementById("makeWallButton").setAttribute("onclick", "editWall()");
+    document.getElementById("makeWallButton").innerHTML = "Edit wall";
+  }
+
+  function createSpawnButtons(){
+    document.getElementById("makeWallButton").setAttribute("onclick", "addSpawn(getInputPos())");
+    document.getElementById("makeWallButton").innerHTML = "Create spawnpoint";
+  }
+
+  function editSpawnButtons(){
+    document.getElementById("makeWallButton").setAttribute("onclick", "editSpawn()");
+    document.getElementById("makeWallButton").innerHTML = "Edit spawn";
+  }
+
+  const noFunc = () => {};
+
+  function resetModes(){
+    highlightedWall = {};
+  }
+
+  function setAddWalls(){
+    mouseDownFunc = addWallsDown;
+    mouseUpFunc = addWallsUp;
+    keyDownFunc = noFunc;
+    resetModes();
+
+    createWallButtons();
+  }
+
+  const addWallsDown = () => {
+    startForm();
+  }
+
+  const addWallsUp = () => {
+    endForm();
+  }
+
+  function setRemoveWalls(){
+    mouseDownFunc = removeWallsDown;
+    mouseUpFunc = noFunc;
+    keyDownFunc = noFunc;
+    resetModes();
+
+    createWallButtons();
+  }
+
+  const removeWallsDown = () => {
+    deleteWall();
+  }
+
+  function setEditWalls (){
+    mouseDownFunc = editWallDown;
+    mouseUpFunc = noFunc;
+    keyDownFunc = editWallKeyDown;
+    resetModes();
+
+    editWallButtons();
+  }
+
+  const editWallDown = () => {
+    selectWall();
+  }
+
+  const editWallKeyDown = (e) => {
+    if(highlightedWall.pos){
+      if(e.keyCode == 38){
+        highlightedWall.pos.y--;
+        updateInputs();
+      }else if(e.keyCode == 40){
+        highlightedWall.pos.y++;
+        updateInputs();
+      }else if(e.keyCode == 37){
+        highlightedWall.pos.x--;
+        updateInputs();
+      }else if(e.keyCode == 39){
+        highlightedWall.pos.x++;
+        updateInputs();
+      }
+    }
+  }
+
+  function setAddSpawns(){
+    mouseDownFunc = addSpawnsDown;
+    mouseUpFunc = noFunc;
+    keyDownFunc = noFunc;
+    resetModes();
+
+    createSpawnButtons();
+  }
+
+  const addSpawnsDown = () => {
+    addSpawn(Object.assign({}, cursorPos));
+  }
+
+  function setRemoveSpawns(){
+    mouseDownFunc = removeSpawnsDown;
+    mouseUpFunc = noFunc;
+    keyDownFunc = noFunc;
+    resetModes();
+
+    createSpawnButtons();
+  }
+
+  const removeSpawnsDown = () => {
+    removeSpawn();
+  }
+
+  function setEditSpawns(){
+    mouseDownFunc = selectSpawn;
+    mouseUpFunc = noFunc;
+    keyDownFunc = editSpawnKeyDown;
+    resetModes();
+
+    editSpawnButtons();
+  }
+
+  const editSpawnKeyDown = (e) => {
+    if(highlightedSpawn.pos){
+      if(e.keyCode == 38){
+        highlightedSpawn.pos.y--;
+        updateInputs();
+      }else if(e.keyCode == 40){
+        highlightedSpawn.pos.y++;
+        updateInputs();
+      }else if(e.keyCode == 37){
+        highlightedSpawn.pos.x--;
+        updateInputs();
+      }else if(e.keyCode == 39){
+        highlightedSpawn.pos.x++;
+        updateInputs();
+      }
+    }
+  }
+
+  var mouseDownFunc = addWallsDown;
+  var mouseUpFunc = addWallsUp;
+
+  var keyDownFunc = noFunc;
+
+  canvas.addEventListener('mousedown', function(e) {
+    getCursorPosition(e);
+    mouseDownFunc();
+  });
+
+  canvas.addEventListener('mouseup', function(e) {
+    getCursorPosition(e);
+    mouseUpFunc();
+  });
+
+  canvas.addEventListener('keydown', function(e){
+    keyDownFunc(e);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(e.keyCode == 13){
+      document.getElementById("makeWallButton").click();
+    }
+  });
+  </script>
+</html>
